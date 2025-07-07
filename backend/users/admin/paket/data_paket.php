@@ -11,8 +11,8 @@ if (!isset($_SESSION['user']) || ($_SESSION['user']['jabatan'] !== 'admin' && $_
     exit;
 }
 
-// 3. Mengambil data paket untuk ditampilkan di tabel
-$result = mysqli_query($koneksi, "SELECT * FROM paket ORDER BY id_paket ASC");
+// 3. Mengambil data paket utama untuk ditampilkan di tabel
+$result_paket = mysqli_query($koneksi, "SELECT * FROM paket ORDER BY id_paket ASC");
 ?>
 
 <!DOCTYPE html>
@@ -67,11 +67,10 @@ $result = mysqli_query($koneksi, "SELECT * FROM paket ORDER BY id_paket ASC");
                         </div>
                         <div class="card-body">
                             <table id="datatablesSimple" class="table table-striped table-bordered">
-
                                 <thead>
                                     <tr>
                                         <th>ID Paket</th>
-                                        <th>Nama</th>
+                                        <th>Nama & Rincian Isi</th>
                                         <th>Harga</th>
                                         <th>Gambar</th>
                                         <th>Status</th>
@@ -80,17 +79,38 @@ $result = mysqli_query($koneksi, "SELECT * FROM paket ORDER BY id_paket ASC");
                                 </thead>
                                 <tbody>
                                     <?php
-                                    if ($result && mysqli_num_rows($result) > 0) {
-                                        while ($row = mysqli_fetch_assoc($result)) { ?>
+                                    if ($result_paket && mysqli_num_rows($result_paket) > 0) {
+                                        while ($paket = mysqli_fetch_assoc($result_paket)) { ?>
                                             <tr>
-                                                <td><?= htmlspecialchars($row['id_paket']) ?></td>
-                                                <td><?= htmlspecialchars($row['nama_paket']) ?></td>
-                                                <td>Rp <?= number_format($row['harga_paket']) ?></td>
+                                                <td><?= htmlspecialchars($paket['id_paket']) ?></td>
                                                 <td>
-                                                    <img src="../../../assets/img/paket/<?= htmlspecialchars($row['poto_paket']) ?>" width="100" alt="<?= htmlspecialchars($row['nama_paket']) ?>">
+                                                    <strong><?= htmlspecialchars($paket['nama_paket']) ?></strong>
+                                                    <ul class="list-unstyled small mt-2 mb-0">
+                                                        <?php
+                                                        // Query untuk mengambil detail isi paket
+                                                        $id_paket_current = $paket['id_paket'];
+                                                        $query_detail = "SELECT dp.jumlah, p.nama_produk 
+                                                                         FROM detail_paket dp 
+                                                                         JOIN produk p ON dp.id_produk = p.id_produk 
+                                                                         WHERE dp.id_paket = ?";
+                                                        $stmt = mysqli_prepare($koneksi, $query_detail);
+                                                        mysqli_stmt_bind_param($stmt, "s", $id_paket_current);
+                                                        mysqli_stmt_execute($stmt);
+                                                        $result_detail = mysqli_stmt_get_result($stmt);
+
+                                                        while ($item = mysqli_fetch_assoc($result_detail)) {
+                                                            echo '<li><i class="fas fa-check-circle fa-xs text-success me-1"></i>' . htmlspecialchars($item['jumlah']) . 'x ' . htmlspecialchars($item['nama_produk']) . '</li>';
+                                                        }
+                                                        mysqli_stmt_close($stmt);
+                                                        ?>
+                                                    </ul>
+                                                </td>
+                                                <td>Rp <?= number_format($paket['harga_paket']) ?></td>
+                                                <td>
+                                                    <img src="../../../assets/img/paket/<?= htmlspecialchars($paket['poto_paket']) ?>" width="100" alt="<?= htmlspecialchars($paket['nama_paket']) ?>">
                                                 </td>
                                                 <td>
-                                                    <?php if ($row['status_paket'] === 'aktif'): ?>
+                                                    <?php if ($paket['status_paket'] === 'aktif'): ?>
                                                         <span class="badge bg-success">Aktif</span>
                                                     <?php else: ?>
                                                         <span class="badge bg-secondary">Tidak Aktif</span>
@@ -98,13 +118,13 @@ $result = mysqli_query($koneksi, "SELECT * FROM paket ORDER BY id_paket ASC");
                                                 </td>
                                                 <td class="text-center">
                                                     <div class="d-flex justify-content-center gap-2">
-                                                        <a href="paket_edit.php?id=<?= htmlspecialchars($row['id_paket']) ?>" class="btn btn-warning btn-sm" title="Edit">
+                                                        <a href="paket_edit.php?id=<?= htmlspecialchars($paket['id_paket']) ?>" class="btn btn-warning btn-sm" title="Edit">
                                                             <i class="fas fa-edit"></i>
                                                         </a>
-                                                        <a href="paket_ubah_status.php?id=<?= htmlspecialchars($row['id_paket']) ?>" class="btn btn-secondary btn-sm" title="Ubah Status">
+                                                        <a href="paket_ubah_status.php?id=<?= htmlspecialchars($paket['id_paket']) ?>" class="btn btn-secondary btn-sm" title="Ubah Status">
                                                             <i class="fas fa-toggle-on"></i>
                                                         </a>
-                                                        <a href="paket_hapus.php?id=<?= htmlspecialchars($row['id_paket']) ?>" class="btn btn-danger btn-sm" onclick="return confirm('Anda yakin ingin menghapus paket ini secara permanen?')" title="Hapus Permanen">
+                                                        <a href="paket_hapus.php?id=<?= htmlspecialchars($paket['id_paket']) ?>" class="btn btn-danger btn-sm" onclick="return confirm('Anda yakin ingin menghapus paket ini secara permanen?')" title="Hapus Permanen">
                                                             <i class="fas fa-trash"></i>
                                                         </a>
                                                     </div>
@@ -113,7 +133,6 @@ $result = mysqli_query($koneksi, "SELECT * FROM paket ORDER BY id_paket ASC");
                                     <?php
                                         }
                                     } else {
-                                        // Tampilkan baris ini jika tidak ada data paket
                                         echo '<tr><td colspan="6" class="text-center">Belum ada data paket.</td></tr>';
                                     }
                                     ?>

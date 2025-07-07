@@ -1,62 +1,37 @@
 <?php
-// Langkah 1: Definisikan judul halaman dan panggil header.
-// Header akan secara otomatis memuat session_start() dan koneksi.php.
-$page_title = "Menu Lengkap";
-// include 'includes/header.php';
-include 'backend/koneksi.php';
+$page_title = "Menu";
+include 'backend/koneksi.php'; // Pastikan path ini benar
 
-// =========================================================================
-// == LOGIKA PENGAMBILAN DATA STOK & PRODUK
-// =========================================================================
-
-// Ambil semua data stok terkini dari log_stok dalam satu kali query yang efisien
-$stok_terkini = [];
-$query_stok = "
-    SELECT id_produk, NULL as id_kategori_stok, SUM(jumlah_perubahan) as total FROM log_stok WHERE id_produk IS NOT NULL GROUP BY id_produk
-    UNION ALL
-    SELECT NULL as id_produk, id_kategori_stok, SUM(jumlah_perubahan) as total FROM log_stok WHERE id_kategori_stok IS NOT NULL GROUP BY id_kategori_stok
-";
-$result_stok = mysqli_query($koneksi, $query_stok);
-
-// Cek jika query stok berhasil sebelum melanjutkan
-if ($result_stok) {
-    while ($row_stok = mysqli_fetch_assoc($result_stok)) {
-        if ($row_stok['id_produk']) {
-            $stok_terkini['produk'][$row_stok['id_produk']] = $row_stok['total'];
-        } elseif ($row_stok['id_kategori_stok']) {
-            $stok_terkini['kategori'][$row_stok['id_kategori_stok']] = $row_stok['total'];
+// 1. Ambil data Paket yang aktif beserta rinciannya
+$query_paket = "SELECT * FROM paket WHERE status_paket = 'aktif' ORDER BY id_paket ASC";
+$result_paket = mysqli_query($koneksi, $query_paket);
+$pakets = [];
+if ($result_paket) {
+    while ($row = mysqli_fetch_assoc($result_paket)) {
+        $id_paket = $row['id_paket'];
+        $query_detail = "SELECT dp.jumlah, p.nama_produk FROM detail_paket dp JOIN produk p ON dp.id_produk = p.id_produk WHERE dp.id_paket = '$id_paket'";
+        $result_detail = mysqli_query($koneksi, $query_detail);
+        $isi_paket = [];
+        while ($item = mysqli_fetch_assoc($result_detail)) {
+            $isi_paket[] = $item['jumlah'] . 'x ' . $item['nama_produk'];
         }
+        $row['rincian_teks'] = implode(', ', $isi_paket);
+        $pakets[] = $row;
     }
 }
 
-// Ambil semua produk yang aktif
-$sql_produk = "SELECT id_produk, nama_produk, harga, poto_produk, kategori, id_kategori_stok
-               FROM produk 
-               WHERE status_produk = 'aktif' 
-               ORDER BY id_produk ASC";
-$result_produk = mysqli_query($koneksi, $sql_produk);
 
-// Group products by jenis menu (KB, KS, OT, DK)
-$produk_grouped = [
-    'KB' => [],
-    'KS' => [],
-    'OT' => [],
-    'DK' => []
-];
+// 2. Ambil data Produk aktif dan kelompokkan berdasarkan kategori
+$query_produk = "SELECT * FROM produk WHERE status_produk = 'aktif' ORDER BY kategori, nama_produk";
+$result_produk = mysqli_query($koneksi, $query_produk);
+$produks_by_kategori = [];
 if ($result_produk) {
     while ($row = mysqli_fetch_assoc($result_produk)) {
-        $prefix = strtoupper(substr($row['id_produk'], 0, 2));
-        if (isset($produk_grouped[$prefix])) {
-            $produk_grouped[$prefix][] = $row;
-        }
+        $produks_by_kategori[$row['kategori']][] = $row;
     }
 }
-$jenis_menu_labels = [
-    'KB' => 'Kue Balok',
-    'KS' => 'Ketan Susu',
-    'OT' => 'Makanan Lain',
-    'DK' => 'Minuman'
-];
+?>
+
 ?>
 <!DOCTYPE html>
 <html lang="id">
@@ -65,7 +40,8 @@ $jenis_menu_labels = [
     <meta charset="UTF-8" />
     <meta http-equiv="X-UA-Compatible" content="IE=edge" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <link rel="icon" type="image/png" href="assets/img/logo-kuebalok.png">
+    <link rel="icon" type="image/png" href="backend/assets/img/logo-kuebalok.png">
+
     <title><?php echo isset($page_title) ? htmlspecialchars($page_title) . ' - ' : ''; ?>Kue Balok Mang Wiro</title>
 
     <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -75,326 +51,181 @@ $jenis_menu_labels = [
 
     <script src="https://unpkg.com/feather-icons"></script>
 
+
     <link rel="stylesheet" href="assets/css/style1.css" />
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
     <style>
-        html,
-        body {
-            height: 100%;
+        /* Import Font */
+        @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700&display=swap');
+
+        /* Reset & Pengaturan Dasar */
+        :root {
+            --primary: #2e4358;
+            --bg: #f4f7f6;
+            --text-dark: #333;
+            --text-light: #666;
+            --accent: #27ae60;
+        }
+
+        * {
             margin: 0;
             padding: 0;
+            box-sizing: border-box;
+            text-decoration: none;
+            border: none;
+            outline: none;
         }
 
         body {
-            display: flex;
-            flex-direction: column;
-            min-height: 100vh;
+            font-family: 'Poppins', sans-serif;
+            background-color: var(--bg);
+            color: var(--text-dark);
         }
 
-        main {
-            flex: 1;
+        .container {
+            width: 90%;
+            max-width: 1200px;
+            margin: 0 auto;
         }
 
-        .kategori-title {
-            width: 100%;
-            text-align: center;
-            margin-top: 2.5rem;
-            margin-bottom: 1rem;
+        /* Beri jarak atas agar konten tidak tertutup navbar */
+        .main-content-page {
+            padding-top: 8rem;
+            padding-bottom: 4rem;
+        }
+
+        /* Judul Section (Paket & Menu Satuan) */
+        .section-title {
             font-size: 2.2rem;
-            color: var(--primary);
-            border-bottom: 2px solid #eee;
-            padding-bottom: 1rem;
+            text-align: center;
+            margin-bottom: 2.5rem;
+            padding-bottom: 10px;
+            border-bottom: 3px solid var(--primary);
+            display: inline-block;
         }
 
+        .category-section {
+            margin-bottom: 4rem;
+            text-align: center;
+            /* Agar judul section bisa di tengah */
+        }
+
+        /* Judul Kategori (Makanan, Minuman) */
+        .menu-category h3 {
+            font-size: 1.8rem;
+            color: var(--text-dark);
+            margin-bottom: 1.5rem;
+            text-align: left;
+        }
+
+        /* Info Promo Porsi */
+        .promo-porsi-info {
+            background-color: #e6f7ff;
+            border: 1px solid #91d5ff;
+            border-radius: 8px;
+            padding: 1rem;
+            margin-bottom: 2rem;
+            text-align: center;
+            font-size: 1rem;
+            color: #0050b3;
+        }
+
+        /* Grid untuk Kartu Menu/Paket */
         .menu-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-            gap: 1.5rem;
-            align-items: stretch;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 2rem;
         }
 
-        /* ============================================= */
-        /* == CSS PERBAIKAN UNTUK HALAMAN MENU & CARD == */
-        /* ============================================= */
-
-        /* --- 1. Perbaikan Posisi Konten Utama --- */
-        /* Memberi jarak atas agar konten tidak tertutup navbar yang fixed */
-        .main-content-page {
-            padding-top: 6rem;
-            padding-left: 1.5rem;
-            padding-right: 1.5rem;
-            /* Sesuaikan angka ini jika navbar Anda lebih tinggi/pendek */
-        }
-
-        /* --- 2. Perbaikan Tampilan Kartu Menu (.menu-card) --- */
-        .menu-card {
-            background-color: #fff;
-            border: 1px solid #ddd;
-            border-radius: 8px;
-            text-align: center;
-            padding: 1.5rem 1rem;
-            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
-            transition: transform 0.2s, box-shadow 0.2s;
-            cursor: pointer;
-            display: flex;
-            flex-direction: column;
-            height: 100%;
-            min-height: 370px;
-            max-width: 100%;
-        }
-
-        .menu-card:hover {
-            transform: translateY(-5px);
-            /* Efek sedikit terangkat saat disentuh mouse */
-            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
-        }
-
-        .menu-card .menu-card-img {
-            width: 100%;
-            height: 180px;
-            object-fit: cover;
-            border-radius: 5px;
-            margin-bottom: 1rem;
-            background: #f5f5f5;
-        }
-
-        .menu-card .menu-card-title {
-            font-size: 1.2rem;
-            font-weight: 600;
-            margin: 0.5rem 0;
-            min-height: 40px;
-            max-height: 48px;
+        /* Desain Kartu (berlaku untuk produk dan paket) */
+        .card {
+            background-color: white;
+            border-radius: 10px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.08);
             overflow: hidden;
             display: flex;
-            align-items: center;
-            justify-content: center;
+            flex-direction: column;
+            text-align: left;
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
         }
 
-        .menu-card .menu-card-price {
-            font-size: 1.1rem;
-            font-weight: bold;
-            color: var(--primary);
-            margin: 0.5rem 0;
+        .card:hover {
+            transform: translateY(-8px);
+            box-shadow: 0 8px 25px rgba(0, 0, 0, 0.12);
         }
 
-        .menu-card .menu-card-stock {
+        .card img {
+            width: 100%;
+            height: 200px;
+            object-fit: cover;
+        }
+
+        .card-content {
+            padding: 1.5rem;
+            flex-grow: 1;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .card-content h3,
+        .card-content h4 {
+            margin-bottom: 10px;
+            font-size: 1.2rem;
+            font-weight: 600;
+        }
+
+        .card-content .paket-isi {
             font-size: 0.9rem;
-            color: #666;
+            color: var(--text-light);
+            margin-bottom: 15px;
+            flex-grow: 1;
+            /* Mendorong harga dan tombol ke bawah */
+        }
+
+        .price {
+            font-size: 1.4rem;
+            font-weight: 700;
+            color: var(--accent);
             margin-bottom: 1rem;
         }
 
-        /* --- 3. Perbaikan Tombol di Dalam Kartu --- */
         .add-to-cart-btn {
             margin-top: auto;
+            /* Selalu di bagian bawah kartu */
         }
 
         .add-to-cart-btn .btn {
             width: 100%;
-            background-color: var(--bg);
-            border: 1px solid var(--primary);
+            padding: 0.8rem;
+            font-size: 1rem;
+            font-weight: 600;
             color: var(--primary);
-            padding: 0.75rem;
+            background-color: transparent;
+            border: 2px solid var(--primary);
             border-radius: 5px;
-            font-weight: bold;
-            transition: background-color 0.2s, color 0.2s;
+            cursor: pointer;
+            transition: all 0.3s ease;
         }
 
         .add-to-cart-btn .btn:hover {
             background-color: var(--primary);
-            color: #fff;
+            color: white;
         }
 
-        .add-to-cart-btn .btn:disabled {
-            background-color: #e9ecef;
-            border-color: #dee2e6;
-            color: #adb5bd;
-            cursor: not-allowed;
+        .add-to-cart-btn .btn i {
+            margin-right: 8px;
         }
 
-        .add-to-cart-btn .btn svg {
-            margin-right: 0.5rem;
-        }
-
-        @media (max-width: 600px) {
-            .menu-grid {
-                grid-template-columns: repeat(2, 1fr);
-            }
-
-            .apple-style-grid {
-                display: grid;
-                grid-template-columns: repeat(2, 1fr);
-                gap: 16px;
-                justify-content: unset;
-            }
-
-            .apple-card {
-                width: 100%;
-                min-width: 0;
-                max-width: 100%;
-            }
-        }
-
-        /* .main-content-page{
-            padding: 1.5rem;
-        } */
-
-        .menu-filter-bar {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            gap: 1.5rem;
-            margin-bottom: 2rem;
-        }
-
-        .kategori-filter-btn-group {
-            display: flex;
-            gap: 0.5rem;
-            flex-wrap: wrap;
-            justify-content: center;
-            background: #fff;
-            border-radius: 999px;
-            padding: 0.5rem 1.5rem;
-            box-shadow: 0 2px 8px rgba(44, 62, 80, 0.07);
-            border: 1px solid #e0e0e0;
-        }
-
-        .filter-btn {
-            border-radius: 999px !important;
-            border: 1px solid var(--primary) !important;
-            padding: 0.5rem 1.5rem !important;
-            font-weight: bold;
-            background: #fff !important;
-            color: var(--primary) !important;
-            transition: background 0.2s, color 0.2s;
-        }
-
-        .filter-btn.active,
-        .filter-btn:hover {
-            background: var(--primary) !important;
-            color: #fff !important;
-        }
-
-        .search-bar-wrapper {
-            width: 100%;
-            max-width: 400px;
-            background: #fff;
-            border-radius: 999px;
-            box-shadow: 0 2px 8px rgba(44, 62, 80, 0.07);
-            border: 1px solid #e0e0e0;
-            padding: 0.2rem 1rem;
-            display: flex;
-            align-items: center;
-        }
-
-        #menu-search-bar {
-            width: 100%;
-            border: none;
-            outline: none;
-            background: transparent;
-            padding: 0.7rem 0.5rem;
-            font-size: 1rem;
-            border-radius: 999px;
-        }
-
-        .apple-style-grid {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 32px;
-            justify-content: center;
-        }
-
-        .apple-card {
-            position: relative;
-            width: 270px;
-            min-height: 420px;
-            background: #fff;
-            border-radius: 28px;
-            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);
-            overflow: hidden;
-            display: flex;
-            flex-direction: column;
-            transition: box-shadow 0.2s;
-        }
-
-        .apple-card:hover {
-            box-shadow: 0 16px 40px rgba(0, 0, 0, 0.18);
-        }
-
-        .apple-card-img-wrapper {
-            width: 100%;
-            height: 220px;
-            background: #f5f5f7;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
-
-        .apple-card-img {
-            max-width: 90%;
-            max-height: 180px;
-            object-fit: contain;
-            border-radius: 18px;
-        }
-
-        .apple-card-content {
-            padding: 24px 20px 60px 20px;
-            flex: 1;
-            display: flex;
-            flex-direction: column;
-            justify-content: flex-start;
-        }
-
-        .apple-card-title {
-            font-size: 1.25rem;
-            font-weight: 700;
-            margin-bottom: 8px;
-            color: #222;
-        }
-
-        .apple-card-price {
-            font-size: 1.1rem;
-            font-weight: 600;
-            color: #0071e3;
-            margin-bottom: 6px;
-        }
-
-        .apple-card-stock {
-            font-size: 1rem;
-            color: #555;
-        }
-
-        .apple-cart-btn {
-            position: absolute;
-            right: 18px;
-            bottom: 18px;
-            background: #222;
-            color: #fff;
-            border: none;
-            border-radius: 50%;
-            width: 48px;
-            height: 48px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
-            font-size: 1.5rem;
-            cursor: pointer;
-            transition: background 0.2s;
-        }
-
-        .apple-cart-btn:hover {
-            background: #0071e3;
-        }
+        /* Menambahkan sisa style dari file Anda */
+        /* Pastikan ini tidak bertentangan dengan style baru di atas */
+        <?php include 'style1.css'; ?>
     </style>
-
 </head>
 
 <body>
     <nav class="navbar">
         <a href="index.php" class="navbar-logo">
             <img src="assets/img/logo.png" alt="LOGO KUE BALOK MANG WIRO" style="width: 50px;" />
-            <!-- <link rel="icon" type="image/png" href="backend/assets/img/logo-kuebalok.png"> -->
-
         </a>
         <div class="navbar-nav">
             <a href="index.php#home">Beranda</a>
@@ -418,55 +249,68 @@ $jenis_menu_labels = [
             <label for="search-box"><i data-feather="search"></i></label>
         </div>
     </nav>
+    <main class="main-content-page">
+        <div class="container">
 
-    <main>
-        <div class="main-content-page">
-            <div class="menu-filter-bar">
-                <div class="kategori-filter-btn-group">
-                    <button class="filter-btn" data-filter="all">Semua</button>
-                    <?php foreach ($jenis_menu_labels as $kode => $label): ?>
-                        <button class="filter-btn" data-filter="<?= $kode ?>"> <?= htmlspecialchars($label) ?> </button>
-                    <?php endforeach; ?>
-                </div>
-                <div class="search-bar-wrapper">
-                    <input type="text" id="menu-search-bar" placeholder="Cari menu...">
-                </div>
-            </div>
-            <div class="card">
-                <div class="card-body">
-                    <div id="menu-card-grid" class="menu-grid apple-style-grid">
-                        <?php foreach ($produk_grouped as $kode => $produk_list):
-                            foreach ($produk_list as $row):
-                                $stok_tampil = 0;
-                                if (!empty($row['id_kategori_stok'])) {
-                                    $stok_tampil = $stok_terkini['kategori'][$row['id_kategori_stok']] ?? 0;
-                                } else {
-                                    $stok_tampil = $stok_terkini['produk'][$row['id_produk']] ?? 0;
-                                }
-                        ?>
-                                <div class="apple-card" data-kategori="<?= $kode ?>" data-nama="<?= htmlspecialchars(strtolower($row['nama_produk'])) ?>">
-                                    <div class="apple-card-img-wrapper">
-                                        <img src="backend/assets/img/produk/<?= htmlspecialchars($row['poto_produk'] ?: 'default.jpg') ?>" alt="<?= htmlspecialchars($row['nama_produk']) ?>" class="apple-card-img">
+            <?php if (!empty($pakets)): ?>
+                <section class="category-section">
+                    <h2 class="section-title">Paket Spesial</h2>
+                    <div class="menu-grid">
+                        <?php foreach ($pakets as $paket): ?>
+                            <div class="card paket-card">
+                                <img src="backend/assets/img/paket/<?= htmlspecialchars($paket['poto_paket']) ?>" alt="<?= htmlspecialchars($paket['nama_paket']) ?>">
+                                <div class="card-content">
+                                    <h3><?= htmlspecialchars($paket['nama_paket']) ?></h3>
+                                    <p class="paket-isi">Isi: <?= htmlspecialchars($paket['rincian_teks']) ?>.</p>
+                                    <div class="price">Rp <?= number_format($paket['harga_paket'], 0, ',', '.') ?></div>
+                                    <div class="add-to-cart-btn">
+                                        <button class="btn add-paket-to-cart" data-id="<?= htmlspecialchars($paket['id_paket']) ?>">
+                                            <i class="fas fa-shopping-cart"></i> Tambah
+                                        </button>
                                     </div>
-                                    <div class="apple-card-content">
-                                        <h3 class="apple-card-title"><?= htmlspecialchars($row['nama_produk']) ?></h3>
-                                        <p class="apple-card-price">Rp <?= number_format($row['harga'], 0, ',', '.') ?></p>
-                                        <p class="apple-card-stock">Stok: <strong><?= $stok_tampil ?></strong></p>
-                                    </div>
-                                    <button class="apple-cart-btn"
-                                        data-id="<?= htmlspecialchars($row['id_produk'] ?? '') ?>"
-                                        data-nama="<?= htmlspecialchars($row['nama_produk'] ?? 'Produk') ?>"
-                                        data-harga="<?= htmlspecialchars($row['harga'] ?? 0) ?>">
-                                        <i data-feather="shopping-cart"></i>
-                                    </button>
                                 </div>
-                        <?php endforeach;
-                        endforeach; ?>
+                            </div>
+                        <?php endforeach; ?>
                     </div>
-                </div>
-            </div>
+                </section>
+            <?php endif; ?>
+
+            <section class="category-section">
+                <h2 class="section-title">Menu Satuan</h2>
+                <?php foreach ($produks_by_kategori as $kategori => $produks): ?>
+                    <div class="menu-category">
+                        <h3><?= htmlspecialchars(ucfirst($kategori)) ?></h3>
+
+                        <?php if ($kategori === 'makanan' && !empty(array_filter($produks, function ($p) {
+                            return strpos(strtolower($p['nama_produk']), 'kue balok') !== false;
+                        }))): ?>
+                            <div class="promo-porsi-info">
+                                <p>✨ **Promo Spesial Kue Balok:** Beli <strong>5 pcs</strong> dapat diskon Rp 2.000, beli <strong>10 pcs</strong> dapat diskon Rp 5.000! (Berlaku kelipatan untuk 10 pcs)</p>
+                            </div>
+                        <?php endif; ?>
+
+                        <div class="menu-grid">
+                            <?php foreach ($produks as $produk): ?>
+                                <div class="card product-card">
+                                    <img src="backend/assets/img/produk/<?= htmlspecialchars($produk['poto_produk']) ?>" alt="<?= htmlspecialchars($produk['nama_produk']) ?>">
+                                    <div class="card-content">
+                                        <h4><?= htmlspecialchars($produk['nama_produk']) ?></h4>
+                                        <div class="price">Rp <?= number_format($produk['harga'], 0, ',', '.') ?></div>
+                                        <div class="add-to-cart-btn">
+                                            <button class="btn add-product-to-cart" data-id="<?= htmlspecialchars($produk['id_produk']) ?>">
+                                                <i class="fas fa-shopping-cart"></i> Tambah
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            <?php endforeach; ?>
+                        </div>
+                    </div>
+                <?php endforeach; ?>
+            </section>
         </div>
     </main>
+
 
     <script>
         document.addEventListener('DOMContentLoaded', function() {
